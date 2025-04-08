@@ -1,28 +1,55 @@
-# Rollama
+<div align="center">
 
-Rollama is a Python application similar to Ollama but with the ability to connect to remote Ollama servers using OpenAI API compatible interfaces.
+# 🦙 Rollama
 
-## Features
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Python Version](https://img.shields.io/badge/python-3.8%2B-blue)](https://www.python.org/downloads/)
+[![GitHub stars](https://img.shields.io/github/stars/yipman/rollama?style=social)](https://github.com/yipman/rollama/stargazers)
 
-- Run local Ollama models
-- Connect to remote Ollama servers
-- Manage multiple remote server connections
-- Compatible with OpenAI API format
-- Interactive chat mode
-- GUI interface with terminal emulation and file/image attachments
+**Run Ollama models locally or connect to remote servers with ease**
 
-## Installation
+[Features](#features) • 
+[Installation](#installation) • 
+[Usage](#usage) • 
+[Configuration](#configuration) • 
+[Contributing](#contributing)
+
+</div>
+
+---
+
+## 🌟 Features
+
+- **Local Model Support**: Run Ollama models on your local machine
+- **Remote Connectivity**: Connect seamlessly to remote Ollama servers
+- **Server Management**: Easily manage multiple remote server connections
+- **API Compatibility**: Works with OpenAI API compatible interfaces
+- **Interactive Experience**: Enjoy a responsive chat mode with history
+- **Modern GUI**: Use the graphical interface with terminal emulation
+- **File Support**: Attach and process files and images in conversations
+- **Customization**: Personalize settings to your workflow
+- **Cross-Platform**: Works on macOS, Linux, and Windows
+
+## 📦 Installation
+
+### From PyPI (Recommended)
+
+```bash
+pip install rollama
+```
+
+### From Source
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/rollama.git
+git clone https://github.com/yipman/rollama.git
 cd rollama
 
 # Install the package
 pip install -e .
 ```
 
-## Usage
+## 🚀 Usage
 
 ### CLI Version
 
@@ -35,40 +62,55 @@ rollama run llama2 "What is machine learning?" --remote my-server
 
 # Start an interactive chat session
 rollama run llama2 --interactive
+
+# Run with specific parameters
+rollama run llama2 --temperature 0.7 --top-p 0.9 "Generate creative ideas"
 ```
 
 ### GUI Version
 
-Launch the GUI version with:
+Launch the intuitive graphical interface with:
 
 ```bash
 rollama-gui
 ```
 
-The GUI provides a terminal-like interface with additional features:
+<div align="center">
+<i>GUI screenshot coming soon</i>
+</div>
 
-- File and image attachments
-- Settings configuration window
-- Remote server management
-- Model switching
-- Conversation saving
+#### GUI Features
+
+- **Terminal-Like Interface**: Familiar command experience
+- **File Attachments**: Drag & drop files and images
+- **Visual Settings**: Configure parameters through intuitive controls
+- **Server Management**: Connect to different servers without command line
+- **Model Switching**: Change models with a single click
+- **Conversation History**: Save and load previous chats
+- **Export Options**: Save conversations in multiple formats
 
 #### GUI Commands
 
 Within the GUI terminal, you can use these commands:
 
-- `help` - Display available commands
-- `clear` - Clear the terminal
-- `list models` - Show available models
-- `switch model <name>` - Change the active model
-- `switch remote <name>` - Change remote server
-- `show attachments` - List currently attached files/images
-- `clear attachments` - Remove all attachments
-- `exit` or `quit` - Close the application
+Command | Description
+------- | -----------
+`help` | Display available commands
+`clear` | Clear the terminal
+`list models` | Show available models
+`switch model <name>` | Change the active model
+`switch remote <name>` | Change remote server
+`show attachments` | List currently attached files/images
+`clear attachments` | Remove all attachments
+`settings` | Open settings window
+`save` | Save current conversation
+`exit` or `quit` | Close the application
 
 You can also access most features through the menu bar at the top of the window.
 
-### Managing remote servers
+## ⚙️ Configuration
+
+### Managing Remote Servers
 
 ```bash
 # Add a new remote server
@@ -87,7 +129,7 @@ rollama remote remove my-server
 rollama remote default my-server
 ```
 
-### Listing models
+### Working with Models
 
 ```bash
 # List local models
@@ -95,18 +137,49 @@ rollama list
 
 # List models on a remote server
 rollama list --remote my-server
+
+# Pull a model from Ollama repository
+rollama pull llama2
+
+# Get model information
+rollama info llama2
 ```
 
-## Architecture
+### Advanced Configuration
 
-Rollama consists of:
-1. A configuration manager for storing remote server information
-2. An API client for managing connections to local and remote Ollama instances
-3. A model manager to handle operations on models
-4. A CLI interface for user interaction
-5. An interactive mode for chat sessions
-6. A GUI interface built with Tkinter
+Edit the configuration file located at `~/.config/rollama/config.yaml` to:
+- Set global default parameters
+- Configure API keys
+- Customize model behavior
+- Set networking options
 
-## License
+## 🔧 Architecture
 
-MIT
+Rollama is built with a modular architecture:
+
+1. **Configuration Manager**: Securely stores remote server information
+2. **API Client**: Manages connections to local and remote Ollama instances
+3. **Model Manager**: Handles operations on models for consistent performance
+4. **Command Interface**: Provides intuitive CLI interaction
+5. **Interactive Mode**: Enables responsive chat sessions
+6. **GUI Layer**: Delivers a modern user interface with Tkinter
+
+## 👥 Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
+
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add some amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+## 📄 License
+
+Distributed under the MIT License. See `LICENSE` for more information.
+
+---
+
+<div align="center">
+Made with ❤️ by <a href="https://github.com/yipman">yipman</a>
+</div>
