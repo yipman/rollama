@@ -1,6 +1,9 @@
+import sys
 from .api_client import ApiClient
 
 class ModelManager:
+    """Manages interactions with Ollama models, both local and remote."""
+    
     def __init__(self, config):
         """
         Initialize the model manager
@@ -10,35 +13,57 @@ class ModelManager:
         """
         self.config = config
     
-    def run_model(self, model, prompt, remote=None):
+    def _get_client(self, remote=None):
         """
-        Run a prompt against a model
+        Get the API client based on remote configuration
         
         Args:
-            model (str): Model name to use
-            prompt (str): Prompt to send to the model
             remote (str, optional): Remote server name to use
             
         Returns:
-            str: Model response
+            ApiClient: API client instance
         """
-        # Get remote configuration if specified
         remote_config = None
         if remote:
             remote_config = self.config.get_remote(remote)
             if not remote_config:
-                return f"Error: Remote server '{remote}' not found"
+                raise ValueError(f"Error: Remote server '{remote}' not found")
         elif self.config.get_remote():
-            # Use default remote if configured
             remote_config = self.config.get_remote()
-            
-        # Create API client based on whether we're using remote or local
-        client = ApiClient(remote_config)
         
-        if remote_config:
-            return client.run_remote_model(model, prompt)
+        return ApiClient(remote_config)
+    
+    def run_model(self, model_name, prompt, remote=None, stream=True):
+        """
+        Run a model with the given prompt.
+        
+        Args:
+            model_name (str): Name of the model to run
+            prompt (str): Prompt to send to the model
+            remote (str, optional): Remote server to use
+            stream (bool, optional): Whether to stream the response. Defaults to True.
+            
+        Returns:
+            If stream=True: None (prints directly to console)
+            If stream=False: str containing full response
+        """
+        # Get the client for the specified remote or default
+        client = self._get_client(remote)
+        
+        if stream:
+            # Stream the response directly to console
+            full_response = ""
+            for chunk in client.generate(model_name, prompt):
+                response_piece = chunk.get('response', '')
+                full_response += response_piece
+                sys.stdout.write(response_piece)
+                sys.stdout.flush()
+            sys.stdout.write('\n')
+            return None
         else:
-            return client.run_local_model(model, prompt)
+            # Return the full response at once
+            response = client.generate_sync(model_name, prompt)
+            return response.get('response', '')
     
     def list_models(self, remote=None):
         """
@@ -50,20 +75,9 @@ class ModelManager:
         Returns:
             list: Available models
         """
-        # Get remote configuration if specified
-        remote_config = None
-        if remote:
-            remote_config = self.config.get_remote(remote)
-            if not remote_config:
-                return [f"Error: Remote server '{remote}' not found"]
-        elif self.config.get_remote():
-            # Use default remote if configured
-            remote_config = self.config.get_remote()
-            
-        # Create API client based on whether we're using remote or local
-        client = ApiClient(remote_config)
+        client = self._get_client(remote)
         
-        if remote_config:
+        if client.remote_config:
             models = client.list_remote_models()
             source = f"Remote ({remote or 'default'})"
         else:
