@@ -54,41 +54,13 @@ class ModelManager:
         try:
             if stream:
                 # Try to use the streaming version if available
-                if hasattr(client, 'run_stream') or hasattr(client, 'chat_stream'):
-                    # Choose the appropriate streaming method
-                    stream_method = client.run_stream if hasattr(client, 'run_stream') else client.chat_stream
-                    response = stream_method(model_name, prompt)
-                    
-                    # Improved handling of streaming chunks to prevent overwriting
-                    accumulated_text = ""  # Track what we've output so far
-                    last_chunk = ""  # Track the last chunk for spacing logic
-                    
-                    for chunk in response:
-                        piece = chunk.get('response', chunk.get('content', ''))
-                        if not piece:
-                            continue
-                            
-                        # Remove any potential control characters that could cause overwriting
-                        piece = re.sub(r'[\r\b\x1b\[\d*[A-Za-z]]', '', piece)
-                        
-                        # Better spacing handling
-                        if piece and piece[0].isalnum() and accumulated_text and accumulated_text[-1].isalnum():
-                            # If this piece starts with a letter/number and the previous ended with one,
-                            # we need a space to avoid words running together
-                            sys.stdout.write(" ")
-                            accumulated_text += " "
-                        
-                        # Write the cleaned piece
-                        sys.stdout.write(piece)
-                        sys.stdout.flush()
-                        
-                        # Update our tracking variables
-                        accumulated_text += piece
-                        last_chunk = piece
-                        
-                    # End the output with a newline
-                    sys.stdout.write('\n')
-                    sys.stdout.flush()
+                if hasattr(client, 'run_stream'):
+                    response = client.run_stream(model_name, prompt)
+                    self._display_stream_response(response)
+                    return None
+                elif hasattr(client, 'chat_stream'):
+                    response = client.chat_stream(model_name, prompt)
+                    self._display_stream_response(response)
                     return None
                 else:
                     # No streaming method available, fallback to non-streaming
@@ -118,6 +90,43 @@ class ModelManager:
                     
         except Exception as e:
             return f"Error running model: {str(e)}"
+
+    def _display_stream_response(self, response_generator):
+        """
+        Display streaming responses in the terminal with proper formatting
+        
+        Args:
+            response_generator: Generator yielding response chunks
+        """
+        full_text = ""  # Accumulate the full response
+        last_piece = ""  # Track the last piece to handle word boundaries
+        
+        for chunk in response_generator:
+            piece = chunk.get('response', chunk.get('content', ''))
+            if not piece:
+                continue
+                
+            # Extra protection against control characters that might cause overwriting
+            piece = re.sub(r'[\r\n\b\x1b\[\d*[A-Za-z]]', '', piece)
+            
+            # Handle proper spacing to avoid word joining
+            if (piece and piece[0].isalnum() and 
+                full_text and full_text[-1].isalnum() and
+                ' ' not in piece and ' ' not in last_piece):
+                sys.stdout.write(' ')
+                sys.stdout.flush()
+                full_text += ' '
+                
+            # Write the piece to stdout and accumulate the full text
+            sys.stdout.write(piece)
+            sys.stdout.flush()
+            full_text += piece
+            last_piece = piece
+            
+        # Add a final newline for cleaner display
+        if full_text:
+            sys.stdout.write('\n')
+            sys.stdout.flush()
     
     def list_models(self, remote=None):
         """
