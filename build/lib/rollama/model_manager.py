@@ -1,4 +1,5 @@
 import sys
+import re
 from .api_client import ApiClient
 
 class ModelManager:
@@ -51,24 +52,43 @@ class ModelManager:
         client = self._get_client(remote)
         
         try:
-            # Based on error messages, ApiClient likely has a method called 'run' or 'chat' instead
             if stream:
                 # Try to use the streaming version if available
-                if hasattr(client, 'run_stream'):
-                    response = client.run_stream(model_name, prompt)
+                if hasattr(client, 'run_stream') or hasattr(client, 'chat_stream'):
+                    # Choose the appropriate streaming method
+                    stream_method = client.run_stream if hasattr(client, 'run_stream') else client.chat_stream
+                    response = stream_method(model_name, prompt)
+                    
+                    # Improved handling of streaming chunks to prevent overwriting
+                    accumulated_text = ""  # Track what we've output so far
+                    last_chunk = ""  # Track the last chunk for spacing logic
+                    
                     for chunk in response:
                         piece = chunk.get('response', chunk.get('content', ''))
+                        if not piece:
+                            continue
+                            
+                        # Remove any potential control characters that could cause overwriting
+                        piece = re.sub(r'[\r\b\x1b\[\d*[A-Za-z]]', '', piece)
+                        
+                        # Better spacing handling
+                        if piece and piece[0].isalnum() and accumulated_text and accumulated_text[-1].isalnum():
+                            # If this piece starts with a letter/number and the previous ended with one,
+                            # we need a space to avoid words running together
+                            sys.stdout.write(" ")
+                            accumulated_text += " "
+                        
+                        # Write the cleaned piece
                         sys.stdout.write(piece)
                         sys.stdout.flush()
+                        
+                        # Update our tracking variables
+                        accumulated_text += piece
+                        last_chunk = piece
+                        
+                    # End the output with a newline
                     sys.stdout.write('\n')
-                    return None
-                elif hasattr(client, 'chat_stream'):
-                    response = client.chat_stream(model_name, prompt)
-                    for chunk in response:
-                        piece = chunk.get('response', chunk.get('content', ''))
-                        sys.stdout.write(piece)
-                        sys.stdout.flush()
-                    sys.stdout.write('\n')
+                    sys.stdout.flush()
                     return None
                 else:
                     # No streaming method available, fallback to non-streaming
