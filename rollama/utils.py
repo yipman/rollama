@@ -20,7 +20,7 @@ def setup_history():
 class SpinnerAnimation:
     """Displays a spinning animation in the terminal while a process is running."""
     
-    def __init__(self, message=None):
+    def __init__(self, message="Loading..."):
         self.message = message
         self.spinner_chars = itertools.cycle(['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'])
         self.running = False
@@ -28,10 +28,7 @@ class SpinnerAnimation:
     
     def _animate(self):
         while self.running:
-            if self.message:
-                sys.stdout.write(f"\r{next(self.spinner_chars)} {self.message}")
-            else:
-                sys.stdout.write(f"\r{next(self.spinner_chars)}")
+            sys.stdout.write(f"\r{next(self.spinner_chars)} {self.message}")
             sys.stdout.flush()
             time.sleep(0.1)
             
@@ -41,30 +38,25 @@ class SpinnerAnimation:
         
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.stop()
-        # The spinner is now stopped, but the model_manager will handle 
-        # printing the newline and starting the response on a clean line
     
     def start(self):
         self.running = True
-        if self.message:
-            sys.stdout.write(f"\r{next(self.spinner_chars)} {self.message}")
-        else:
-            sys.stdout.write(f"\r{next(self.spinner_chars)}")
+        sys.stdout.write(f"\r{next(self.spinner_chars)} {self.message}")
         sys.stdout.flush()
         self.spinner_thread = threading.Thread(target=self._animate)
         self.spinner_thread.daemon = True
         self.spinner_thread.start()
     
     def stop(self):
+        """Stop the spinner animation and clear the line completely."""
         self.running = False
         if self.spinner_thread:
             self.spinner_thread.join(0.2)
         
-        # Clear the spinner completely
-        msg_length = len(self.message) + 2 if self.message else 2
-        sys.stdout.write("\r" + " " * msg_length + "\r")
+        # Just clear the current line but don't add a newline
+        # The ModelManager will handle the transition to a new line
+        sys.stdout.write("\r" + " " * (len(self.message) + 10) + "\r")
         sys.stdout.flush()
-        # Note: We're NOT adding a newline here, as model_manager will handle the transition
 
 def interactive_mode(model_manager, model_name, remote=None):
     """Run the model in interactive mode with streaming support."""

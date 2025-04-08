@@ -56,36 +56,29 @@ class ModelManager:
             if stream:
                 # Try to use the streaming version if available
                 if hasattr(client, 'run_stream'):
-                    response = client.run_stream(model_name, prompt)
+                    # Get the streaming response generator
+                    response_generator = client.run_stream(model_name, prompt)
                     
-                    # Extra safety measure: add a small delay and ensure a clean start 
-                    # This allows spinner animation to fully clear
-                    time.sleep(0.1)  # Short delay to ensure spinner has stopped
+                    # CRITICAL FIX: Add a blank line and delay to ensure spinner is fully gone
+                    # This needs to happen OUTSIDE of the spinner context in utils.py
+                    print()  # Add a blank line after spinner stops
+                    time.sleep(0.1)  # Short delay to ensure terminal is ready
                     
-                    for chunk in response:
-                        piece = chunk.get('response', chunk.get('content', ''))
-                        # Ensure no control characters remain
-                        piece = re.sub(r'[\r\b\x1b\[\d*[A-Za-z]]', '', piece)
-                        sys.stdout.write(piece)
-                        sys.stdout.flush()
-                    sys.stdout.write('\n')
+                    # Process streaming response
+                    self._handle_streaming_response(response_generator)
                     return None
                     
                 elif hasattr(client, 'chat_stream'):
-                    response = client.chat_stream(model_name, prompt)
+                    # Get the streaming response generator
+                    response_generator = client.chat_stream(model_name, prompt)
                     
-                    # Extra safety measure: add a small delay and ensure a clean start 
-                    time.sleep(0.1)  # Short delay to ensure spinner has stopped
+                    # Same fix for chat_stream
+                    print()  # Add a blank line after spinner stops
+                    time.sleep(0.1)  # Short delay to ensure terminal is ready
                     
-                    for chunk in response:
-                        piece = chunk.get('response', chunk.get('content', ''))
-                        # Ensure no control characters remain
-                        piece = re.sub(r'[\r\b\x1b\[\d*[A-Za-z]]', '', piece)
-                        sys.stdout.write(piece)
-                        sys.stdout.flush()
-                    sys.stdout.write('\n')
+                    # Process streaming response
+                    self._handle_streaming_response(response_generator)
                     return None
-                    
                 else:
                     # No streaming method available, fallback to non-streaming
                     print("\nWarning: Streaming not supported. Falling back to standard mode.")
@@ -115,42 +108,36 @@ class ModelManager:
         except Exception as e:
             return f"Error running model: {str(e)}"
     
-    def _process_streaming_response(self, response_iterator):
-        """
-        Process and display streaming response safely with proper formatting
-        
-        Args:
-            response_iterator: Iterator yielding response chunks
-        """
-        full_text = ""
+    def _handle_streaming_response(self, response_generator):
+        """Process streaming response generator and display output properly"""
+        accumulated_text = ""
         last_chunk = ""
         
-        for chunk in response_iterator:
+        for chunk in response_generator:
             piece = chunk.get('response', chunk.get('content', ''))
             if not piece:
                 continue
                 
             # Clean any control characters that might cause overwriting
-            clean_piece = re.sub(r'\r', '', piece)  # Remove carriage returns
-            clean_piece = re.sub(r'\x1b\[[0-9;]*[a-zA-Z]', '', clean_piece)  # Remove ANSI escape codes
+            clean_piece = re.sub(r'[\r\b\x1b\[\d*[A-Za-z]]', '', piece)
             
-            # Add space between words if needed
+            # Handle spacing between words properly
             if (clean_piece and clean_piece[0].isalnum() and 
-                full_text and full_text[-1].isalnum()):
+                accumulated_text and accumulated_text[-1].isalnum()):
                 sys.stdout.write(' ')
                 sys.stdout.flush()
-                full_text += ' '
+                accumulated_text += ' '
             
+            # Output the cleaned piece
             sys.stdout.write(clean_piece)
             sys.stdout.flush()
-            full_text += clean_piece
-            last_chunk = clean_piece
             
-        # Add final newline for cleaner output
+            accumulated_text += clean_piece
+            last_chunk = clean_piece
+        
+        # Add a final newline
         sys.stdout.write('\n')
         sys.stdout.flush()
-        
-        return None
     
     def list_models(self, remote=None):
         """
