@@ -56,11 +56,11 @@ class ModelManager:
                 # Try to use the streaming version if available
                 if hasattr(client, 'run_stream'):
                     response = client.run_stream(model_name, prompt)
-                    self._display_stream_response(response)
+                    self._safe_stream_to_terminal(response)
                     return None
                 elif hasattr(client, 'chat_stream'):
                     response = client.chat_stream(model_name, prompt)
-                    self._display_stream_response(response)
+                    self._safe_stream_to_terminal(response)
                     return None
                 else:
                     # No streaming method available, fallback to non-streaming
@@ -91,41 +91,50 @@ class ModelManager:
         except Exception as e:
             return f"Error running model: {str(e)}"
 
-    def _display_stream_response(self, response_generator):
+    def _safe_stream_to_terminal(self, stream_generator):
         """
-        Display streaming responses in the terminal with proper formatting
+        Safely write streaming output to terminal, preventing overwriting issues.
         
         Args:
-            response_generator: Generator yielding response chunks
+            stream_generator: Generator of response chunks
         """
-        full_text = ""  # Accumulate the full response
-        last_piece = ""  # Track the last piece to handle word boundaries
+        accumulated_text = ""
+        last_piece = ""
         
-        for chunk in response_generator:
-            piece = chunk.get('response', chunk.get('content', ''))
-            if not piece:
-                continue
+        try:
+            for chunk in stream_generator:
+                # Get the response text from the chunk
+                piece = chunk.get('response', chunk.get('content', ''))
+                if not piece:
+                    continue
                 
-            # Extra protection against control characters that might cause overwriting
-            piece = re.sub(r'[\r\n\b\x1b\[\d*[A-Za-z]]', '', piece)
+                # CRITICAL FIX: Remove carriage returns and control sequences that cause overwriting
+                clean_piece = re.sub(r'\r', '', piece)  # Remove carriage returns
+                clean_piece = re.sub(r'\x1b\[[0-9;]*[a-zA-Z]', '', clean_piece)  # Remove ANSI codes
+                clean_piece = re.sub(r'\b', '', clean_piece)  # Remove backspace characters
+                
+                # Add space between words if needed
+                if (clean_piece and clean_piece[0].isalnum() and 
+                    accumulated_text and accumulated_text[-1].isalnum()):
+                    sys.stdout.write(' ')
+                    sys.stdout.flush()
+                    accumulated_text += ' '
+                
+                # Write the clean piece to stdout
+                if clean_piece:
+                    sys.stdout.write(clean_piece)
+                    sys.stdout.flush()
+                    accumulated_text += clean_piece
+                    last_piece = clean_piece
             
-            # Handle proper spacing to avoid word joining
-            if (piece and piece[0].isalnum() and 
-                full_text and full_text[-1].isalnum() and
-                ' ' not in piece and ' ' not in last_piece):
-                sys.stdout.write(' ')
+            # End with a newline for cleaner display
+            if accumulated_text:
+                sys.stdout.write('\n')
                 sys.stdout.flush()
-                full_text += ' '
                 
-            # Write the piece to stdout and accumulate the full text
-            sys.stdout.write(piece)
-            sys.stdout.flush()
-            full_text += piece
-            last_piece = piece
-            
-        # Add a final newline for cleaner display
-        if full_text:
-            sys.stdout.write('\n')
+        except Exception as e:
+            # In case of error, make sure to print a newline to avoid terminal corruption
+            sys.stdout.write(f"\nError during streaming: {str(e)}\n")
             sys.stdout.flush()
     
     def list_models(self, remote=None):

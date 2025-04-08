@@ -56,12 +56,22 @@ class ModelManager:
                 # Try to use the streaming version if available
                 if hasattr(client, 'run_stream'):
                     response = client.run_stream(model_name, prompt)
-                    self._safe_stream_to_terminal(response)
-                    return None
+                    
+                    # CRITICAL FIX: Add newline after "Thinking..." spinner stops
+                    sys.stdout.write("\n")
+                    sys.stdout.flush()
+                    
+                    # Process streaming response
+                    return self._process_streaming_response(response)
+                    
                 elif hasattr(client, 'chat_stream'):
                     response = client.chat_stream(model_name, prompt)
-                    self._safe_stream_to_terminal(response)
-                    return None
+                    
+                    # Same fix for chat_stream
+                    sys.stdout.write("\n") 
+                    sys.stdout.flush()
+                    
+                    return self._process_streaming_response(response)
                 else:
                     # No streaming method available, fallback to non-streaming
                     print("\nWarning: Streaming not supported. Falling back to standard mode.")
@@ -90,52 +100,43 @@ class ModelManager:
                     
         except Exception as e:
             return f"Error running model: {str(e)}"
-
-    def _safe_stream_to_terminal(self, stream_generator):
+    
+    def _process_streaming_response(self, response_iterator):
         """
-        Safely write streaming output to terminal, preventing overwriting issues.
+        Process and display streaming response safely with proper formatting
         
         Args:
-            stream_generator: Generator of response chunks
+            response_iterator: Iterator yielding response chunks
         """
-        accumulated_text = ""
-        last_piece = ""
+        full_text = ""
+        last_chunk = ""
         
-        try:
-            for chunk in stream_generator:
-                # Get the response text from the chunk
-                piece = chunk.get('response', chunk.get('content', ''))
-                if not piece:
-                    continue
+        for chunk in response_iterator:
+            piece = chunk.get('response', chunk.get('content', ''))
+            if not piece:
+                continue
                 
-                # CRITICAL FIX: Remove carriage returns and control sequences that cause overwriting
-                clean_piece = re.sub(r'\r', '', piece)  # Remove carriage returns
-                clean_piece = re.sub(r'\x1b\[[0-9;]*[a-zA-Z]', '', clean_piece)  # Remove ANSI codes
-                clean_piece = re.sub(r'\b', '', clean_piece)  # Remove backspace characters
-                
-                # Add space between words if needed
-                if (clean_piece and clean_piece[0].isalnum() and 
-                    accumulated_text and accumulated_text[-1].isalnum()):
-                    sys.stdout.write(' ')
-                    sys.stdout.flush()
-                    accumulated_text += ' '
-                
-                # Write the clean piece to stdout
-                if clean_piece:
-                    sys.stdout.write(clean_piece)
-                    sys.stdout.flush()
-                    accumulated_text += clean_piece
-                    last_piece = clean_piece
+            # Clean any control characters that might cause overwriting
+            clean_piece = re.sub(r'\r', '', piece)  # Remove carriage returns
+            clean_piece = re.sub(r'\x1b\[[0-9;]*[a-zA-Z]', '', clean_piece)  # Remove ANSI escape codes
             
-            # End with a newline for cleaner display
-            if accumulated_text:
-                sys.stdout.write('\n')
+            # Add space between words if needed
+            if (clean_piece and clean_piece[0].isalnum() and 
+                full_text and full_text[-1].isalnum()):
+                sys.stdout.write(' ')
                 sys.stdout.flush()
-                
-        except Exception as e:
-            # In case of error, make sure to print a newline to avoid terminal corruption
-            sys.stdout.write(f"\nError during streaming: {str(e)}\n")
+                full_text += ' '
+            
+            sys.stdout.write(clean_piece)
             sys.stdout.flush()
+            full_text += clean_piece
+            last_chunk = clean_piece
+            
+        # Add final newline for cleaner output
+        sys.stdout.write('\n')
+        sys.stdout.flush()
+        
+        return None
     
     def list_models(self, remote=None):
         """
