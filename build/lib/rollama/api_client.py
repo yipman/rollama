@@ -70,7 +70,7 @@ class ApiClient:
                 f"{self.remote['url']}/v1/chat/completions", 
                 headers=headers,
                 json=payload,
-                timeout=120
+                timeout=12000
             )
             
             if response.status_code == 200:

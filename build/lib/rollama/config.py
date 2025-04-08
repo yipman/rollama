@@ -17,7 +17,9 @@ class Config:
             default_config = {
                 "remotes": {},
                 "default_remote": None,
-                "default_model": "llama2"
+                "default_model": "llama2",
+                "font_family": "Courier",
+                "font_size": 10
             }
             
             with open(self.config_file, "w") as f:

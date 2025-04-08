@@ -2,7 +2,7 @@ import argparse
 import sys
 from .config import Config
 from .model_manager import ModelManager
-from .utils import interactive_mode
+from .utils import interactive_mode, SpinnerAnimation
 
 def main():
     parser = argparse.ArgumentParser(description="Rollama - Ollama with remote capabilities")
@@ -14,6 +14,7 @@ def main():
     run_parser.add_argument("prompt", nargs="?", help="Prompt to send to the model")
     run_parser.add_argument("--remote", "-r", help="Remote server name to use")
     run_parser.add_argument("--interactive", "-i", action="store_true", help="Start interactive mode")
+    run_parser.add_argument("--no-stream", action="store_true", help="Disable response streaming")
     
     # List models command
     list_parser = subparsers.add_parser("list", help="List available models")
@@ -54,8 +55,20 @@ def main():
         if args.interactive:
             interactive_mode(model_manager, args.model, args.remote)
         elif args.prompt:
-            response = model_manager.run_model(args.model, args.prompt, remote=args.remote)
-            print(response)
+            with SpinnerAnimation("Thinking..."):
+                response = model_manager.run_model(
+                    args.model, 
+                    args.prompt, 
+                    remote=args.remote,
+                    stream=not args.no_stream
+                )
+            
+            if not args.no_stream:
+                # For streaming mode, run_model will handle printing as it streams
+                pass
+            else:
+                # For non-streaming mode, print the full response
+                print(response)
         else:
             run_parser.print_help()
             return 1

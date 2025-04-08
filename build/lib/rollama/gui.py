@@ -1,6 +1,6 @@
 import tkinter as tk
 from tkinter import scrolledtext, filedialog, ttk, messagebox
-from tkinter.font import Font
+from tkinter.font import Font, families
 import os
 import sys
 import threading
@@ -26,6 +26,10 @@ class RollamaTerminal(tk.Frame):
         if self.config.get_remote():
             self.current_remote = self.config.config.get("default_remote")
         
+        # Load font settings or use defaults
+        self.font_family = self.config.config.get("font_family", "Courier")
+        self.font_size = self.config.config.get("font_size", 10)
+        
         self.create_widgets()
         self.create_menu()
         
@@ -47,7 +51,7 @@ class RollamaTerminal(tk.Frame):
         
     def create_widgets(self):
         # Terminal output
-        terminal_font = Font(family="Courier", size=10)
+        terminal_font = Font(family=self.font_family, size=self.font_size)
         self.terminal = scrolledtext.ScrolledText(self, wrap=tk.WORD, bg="black", fg="light green", 
                                                 insertbackground="white", font=terminal_font)
         self.terminal.pack(fill=tk.BOTH, expand=True)
@@ -373,7 +377,7 @@ Any other text will be sent as a prompt to the current model.
     def open_settings(self):
         settings_window = tk.Toplevel(self.parent)
         settings_window.title("Rollama Settings")
-        settings_window.geometry("400x300")
+        settings_window.geometry("400x400")  # Increased height to accommodate new options
         settings_window.resizable(False, False)
         
         # Create a notebook for tabbed settings
@@ -397,12 +401,52 @@ Any other text will be sent as a prompt to the current model.
         theme_menu['values'] = ['Dark', 'Light', 'Matrix']
         theme_menu.grid(row=1, column=1, padx=5, pady=5)
         
+        # Font settings
+        tk.Label(general_frame, text="Font Family:").grid(row=2, column=0, sticky=tk.W, pady=5)
+        font_family_var = tk.StringVar(value=self.font_family)
+        font_family_menu = ttk.Combobox(general_frame, textvariable=font_family_var, state="readonly", width=18)
+        # Get available monospace fonts
+        available_fonts = sorted([f for f in families() if f.lower() in 
+                                 ['courier', 'consolas', 'monaco', 'menlo', 'monospace', 
+                                  'fixedsys', 'terminal', 'dejavu sans mono', 'liberation mono']])
+        if not available_fonts:  # Fallback if no monospace fonts found
+            available_fonts = sorted(families())
+        font_family_menu['values'] = available_fonts
+        font_family_menu.grid(row=2, column=1, padx=5, pady=5)
+        
+        tk.Label(general_frame, text="Font Size:").grid(row=3, column=0, sticky=tk.W, pady=5)
+        font_size_var = tk.IntVar(value=self.font_size)
+        font_size_spinbox = tk.Spinbox(general_frame, from_=8, to=24, width=5, textvariable=font_size_var)
+        font_size_spinbox.grid(row=3, column=1, padx=5, pady=5, sticky=tk.W)
+        
+        # Preview label
+        tk.Label(general_frame, text="Preview:").grid(row=4, column=0, sticky=tk.W, pady=5)
+        preview_frame = tk.Frame(general_frame, bg="black", width=200, height=50)
+        preview_frame.grid(row=4, column=1, padx=5, pady=5, sticky=tk.W)
+        preview_label = tk.Label(preview_frame, text="Aa Bb Cc 123", bg="black", fg="light green")
+        preview_label.pack(expand=True, fill=tk.BOTH)
+        
+        # Update preview when font settings change
+        def update_preview(*args):
+            try:
+                preview_font = Font(family=font_family_var.get(), size=font_size_var.get())
+                preview_label.config(font=preview_font)
+            except:
+                pass  # Ignore font errors in preview
+        
+        font_family_menu.bind("<<ComboboxSelected>>", update_preview)
+        font_size_spinbox.bind("<KeyRelease>", update_preview)
+        
         # Save button
         save_btn = tk.Button(general_frame, text="Save Settings", 
-                             command=lambda: self.save_settings(default_model_entry.get(), theme_var.get()))
+                             command=lambda: self.save_settings(
+                                 default_model_entry.get(), 
+                                 theme_var.get(),
+                                 font_family_var.get(),
+                                 font_size_var.get()))
         save_btn.grid(row=5, column=0, columnspan=2, pady=20)
         
-    def save_settings(self, default_model, theme):
+    def save_settings(self, default_model, theme, font_family, font_size):
         # Save default model
         if default_model:
             self.config.set_default_model(default_model)
@@ -415,7 +459,24 @@ Any other text will be sent as a prompt to the current model.
         elif theme.lower() == "matrix":
             self.terminal.config(bg="black", fg="green")
             
-        messagebox.showinfo("Settings", "Settings saved successfully")
+        # Save and apply font settings
+        try:
+            # Update config values
+            self.config.config["font_family"] = font_family
+            self.config.config["font_size"] = int(font_size)
+            self.config._save_config()
+            
+            # Store current values
+            self.font_family = font_family
+            self.font_size = int(font_size)
+            
+            # Apply new font
+            new_font = Font(family=font_family, size=int(font_size))
+            self.terminal.config(font=new_font)
+            
+            messagebox.showinfo("Settings", "Settings saved successfully")
+        except Exception as e:
+            messagebox.showerror("Error", f"Error saving font settings: {str(e)}")
         
     def open_remote_manager(self):
         remote_window = tk.Toplevel(self.parent)

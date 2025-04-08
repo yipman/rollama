@@ -1,6 +1,10 @@
 import os
 import readline
 import atexit
+import sys
+import time
+import threading
+import itertools
 
 def setup_history():
     """Set up command history for interactive mode"""
@@ -13,37 +17,61 @@ def setup_history():
     
     atexit.register(readline.write_history_file, histfile)
 
-def interactive_mode(model_manager, model, remote=None):
-    """
-    Start an interactive chat session with the model
+class SpinnerAnimation:
+    """Displays a spinning animation in the terminal while a process is running."""
     
-    Args:
-        model_manager (ModelManager): Model manager instance
-        model (str): Model to use
-        remote (str, optional): Remote server to use
-    """
+    def __init__(self, message="Loading..."):
+        self.message = message
+        self.spinner_chars = itertools.cycle(['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'])
+        self.running = False
+        self.spinner_thread = None
+    
+    def _animate(self):
+        while self.running:
+            sys.stdout.write(f"\r{next(self.spinner_chars)} {self.message}")
+            sys.stdout.flush()
+            time.sleep(0.1)
+            
+    def __enter__(self):
+        self.start()
+        return self
+        
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.stop()
+    
+    def start(self):
+        self.running = True
+        sys.stdout.write(f"\r{next(self.spinner_chars)} {self.message}")
+        sys.stdout.flush()
+        self.spinner_thread = threading.Thread(target=self._animate)
+        self.spinner_thread.daemon = True
+        self.spinner_thread.start()
+    
+    def stop(self):
+        self.running = False
+        if self.spinner_thread:
+            self.spinner_thread.join(0.2)
+        sys.stdout.write("\r" + " " * (len(self.message) + 2) + "\r")
+        sys.stdout.flush()
+
+def interactive_mode(model_manager, model_name, remote=None):
+    """Run the model in interactive mode with streaming support."""
     setup_history()
     
-    print(f"Starting chat with model: {model}")
-    print("Type 'exit', 'quit', or press Ctrl+D to exit")
-    
-    history = []
+    print(f"Starting interactive session with {model_name}. Type 'exit' or 'quit' to end the session.")
     
     while True:
         try:
-            prompt = input("\n> ")
-            if prompt.lower() in ("exit", "quit"):
+            user_input = input("\n> ")
+            if user_input.lower() in ['exit', 'quit']:
                 break
                 
-            response = model_manager.run_model(model, prompt, remote)
-            print("\n" + response)
-            
-            # Save history for context
-            history.append((prompt, response))
-            
-        except EOFError:
-            print("\nExiting...")
-            break
+            with SpinnerAnimation("Thinking..."):
+                # Start the stream response - model_manager should handle printing
+                model_manager.run_model(model_name, user_input, remote=remote, stream=True)
+                
         except KeyboardInterrupt:
-            print("\nOperation cancelled")
-            continue
+            print("\nExiting interactive mode.")
+            break
+        except Exception as e:
+            print(f"Error: {str(e)}")
