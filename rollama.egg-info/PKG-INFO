@@ -1,0 +1,10 @@
+Metadata-Version: 2.4
+Name: rollama
+Version: 0.1.0
+Summary: Ollama with remote capabilities
+Author: Developer
+Requires-Dist: requests>=2.25.0
+Requires-Dist: pillow>=9.0.0
+Dynamic: author
+Dynamic: requires-dist
+Dynamic: summary

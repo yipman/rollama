@@ -1,0 +1,17 @@
+README.md
+setup.py
+rollama/__init__.py
+rollama/api_client.py
+rollama/cli.py
+rollama/config.py
+rollama/gui.py
+rollama/gui_main.py
+rollama/model_manager.py
+rollama/rollama-gui.py
+rollama/utils.py
+rollama.egg-info/PKG-INFO
+rollama.egg-info/SOURCES.txt
+rollama.egg-info/dependency_links.txt
+rollama.egg-info/entry_points.txt
+rollama.egg-info/requires.txt
+rollama.egg-info/top_level.txt
