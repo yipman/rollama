@@ -1,5 +1,6 @@
 import sys
 import re
+import time
 from .api_client import ApiClient
 
 class ModelManager:
@@ -57,21 +58,34 @@ class ModelManager:
                 if hasattr(client, 'run_stream'):
                     response = client.run_stream(model_name, prompt)
                     
-                    # CRITICAL FIX: Add newline after "Thinking..." spinner stops
-                    sys.stdout.write("\n")
-                    sys.stdout.flush()
+                    # Extra safety measure: add a small delay and ensure a clean start 
+                    # This allows spinner animation to fully clear
+                    time.sleep(0.1)  # Short delay to ensure spinner has stopped
                     
-                    # Process streaming response
-                    return self._process_streaming_response(response)
+                    for chunk in response:
+                        piece = chunk.get('response', chunk.get('content', ''))
+                        # Ensure no control characters remain
+                        piece = re.sub(r'[\r\b\x1b\[\d*[A-Za-z]]', '', piece)
+                        sys.stdout.write(piece)
+                        sys.stdout.flush()
+                    sys.stdout.write('\n')
+                    return None
                     
                 elif hasattr(client, 'chat_stream'):
                     response = client.chat_stream(model_name, prompt)
                     
-                    # Same fix for chat_stream
-                    sys.stdout.write("\n") 
-                    sys.stdout.flush()
+                    # Extra safety measure: add a small delay and ensure a clean start 
+                    time.sleep(0.1)  # Short delay to ensure spinner has stopped
                     
-                    return self._process_streaming_response(response)
+                    for chunk in response:
+                        piece = chunk.get('response', chunk.get('content', ''))
+                        # Ensure no control characters remain
+                        piece = re.sub(r'[\r\b\x1b\[\d*[A-Za-z]]', '', piece)
+                        sys.stdout.write(piece)
+                        sys.stdout.flush()
+                    sys.stdout.write('\n')
+                    return None
+                    
                 else:
                     # No streaming method available, fallback to non-streaming
                     print("\nWarning: Streaming not supported. Falling back to standard mode.")
