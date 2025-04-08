@@ -20,7 +20,7 @@ def setup_history():
 class SpinnerAnimation:
     """Displays a spinning animation in the terminal while a process is running."""
     
-    def __init__(self, message="Loading..."):
+    def __init__(self, message=None):
         self.message = message
         self.spinner_chars = itertools.cycle(['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'])
         self.running = False
@@ -28,7 +28,10 @@ class SpinnerAnimation:
     
     def _animate(self):
         while self.running:
-            sys.stdout.write(f"\r{next(self.spinner_chars)} {self.message}")
+            if self.message:
+                sys.stdout.write(f"\r{next(self.spinner_chars)} {self.message}")
+            else:
+                sys.stdout.write(f"\r{next(self.spinner_chars)}")
             sys.stdout.flush()
             time.sleep(0.1)
             
@@ -41,7 +44,10 @@ class SpinnerAnimation:
     
     def start(self):
         self.running = True
-        sys.stdout.write(f"\r{next(self.spinner_chars)} {self.message}")
+        if self.message:
+            sys.stdout.write(f"\r{next(self.spinner_chars)} {self.message}")
+        else:
+            sys.stdout.write(f"\r{next(self.spinner_chars)}")
         sys.stdout.flush()
         self.spinner_thread = threading.Thread(target=self._animate)
         self.spinner_thread.daemon = True
@@ -52,10 +58,9 @@ class SpinnerAnimation:
         if self.spinner_thread:
             self.spinner_thread.join(0.2)
         
-        # Clear the spinner line completely
-        sys.stdout.write("\r" + " " * (len(self.message) + 10))
+        msg_length = len(self.message) + 2 if self.message else 2
+        sys.stdout.write("\r" + " " * msg_length)
         
-        # CRITICAL FIX: Add a newline to ensure text starts on a fresh line
         sys.stdout.write("\r\n")
         sys.stdout.flush()
 
@@ -71,8 +76,7 @@ def interactive_mode(model_manager, model_name, remote=None):
             if user_input.lower() in ['exit', 'quit']:
                 break
                 
-            with SpinnerAnimation("Thinking..."):
-                # Start the stream response - model_manager should handle printing
+            with SpinnerAnimation():
                 model_manager.run_model(model_name, user_input, remote=remote, stream=True)
                 
         except KeyboardInterrupt:

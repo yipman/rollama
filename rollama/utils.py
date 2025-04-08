@@ -41,6 +41,8 @@ class SpinnerAnimation:
         
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.stop()
+        # The spinner is now stopped, but the model_manager will handle 
+        # printing the newline and starting the response on a clean line
     
     def start(self):
         self.running = True
@@ -58,11 +60,11 @@ class SpinnerAnimation:
         if self.spinner_thread:
             self.spinner_thread.join(0.2)
         
+        # Clear the spinner completely
         msg_length = len(self.message) + 2 if self.message else 2
-        sys.stdout.write("\r" + " " * msg_length)
-        
-        sys.stdout.write("\r\n")
+        sys.stdout.write("\r" + " " * msg_length + "\r")
         sys.stdout.flush()
+        # Note: We're NOT adding a newline here, as model_manager will handle the transition
 
 def interactive_mode(model_manager, model_name, remote=None):
     """Run the model in interactive mode with streaming support."""
@@ -76,7 +78,9 @@ def interactive_mode(model_manager, model_name, remote=None):
             if user_input.lower() in ['exit', 'quit']:
                 break
                 
+            # Use spinner without text
             with SpinnerAnimation():
+                # The model_manager will now handle transitioning from spinner to response
                 model_manager.run_model(model_name, user_input, remote=remote, stream=True)
                 
         except KeyboardInterrupt:
