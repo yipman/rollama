@@ -53,17 +53,60 @@ class ModelManager:
         if stream:
             # Stream the response directly to console
             full_response = ""
-            for chunk in client.generate(model_name, prompt):
-                response_piece = chunk.get('response', '')
-                full_response += response_piece
-                sys.stdout.write(response_piece)
-                sys.stdout.flush()
-            sys.stdout.write('\n')
-            return None
-        else:
+            try:
+                # Try different client API patterns
+                response = client.completion(
+                    model=model_name,
+                    prompt=prompt,
+                    stream=True,
+                )
+                
+                for chunk in response:
+                    if 'response' in chunk:
+                        response_piece = chunk['response']
+                        full_response += response_piece
+                        sys.stdout.write(response_piece)
+                        sys.stdout.flush()
+                    elif 'content' in chunk:  # Alternative API format
+                        response_piece = chunk['content']
+                        full_response += response_piece
+                        sys.stdout.write(response_piece)
+                        sys.stdout.flush()
+                
+                sys.stdout.write('\n')
+                return None
+                
+            except (AttributeError, TypeError) as e:
+                # Fallback to non-streaming if streaming fails
+                print(f"\nWarning: Streaming not supported ({str(e)}). Falling back to standard mode.")
+                stream = False
+                
+        if not stream:
             # Return the full response at once
-            response = client.generate_sync(model_name, prompt)
-            return response.get('response', '')
+            try:
+                response = client.completion(
+                    model=model_name,
+                    prompt=prompt,
+                )
+                
+                if isinstance(response, dict):
+                    return response.get('response', '')
+                else:
+                    return str(response)
+                    
+            except AttributeError:
+                # Try alternative API pattern
+                try:
+                    response = client.generate(
+                        model_name=model_name,
+                        prompt=prompt,
+                    )
+                    if isinstance(response, dict):
+                        return response.get('response', '')
+                    else:
+                        return str(response)
+                except Exception as e:
+                    return f"Error: {str(e)}"
     
     def list_models(self, remote=None):
         """
