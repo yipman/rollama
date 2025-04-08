@@ -50,63 +50,54 @@ class ModelManager:
         # Get the client for the specified remote or default
         client = self._get_client(remote)
         
-        if stream:
-            # Stream the response directly to console
-            full_response = ""
-            try:
-                # Try different client API patterns
-                response = client.completion(
-                    model=model_name,
-                    prompt=prompt,
-                    stream=True,
-                )
-                
-                for chunk in response:
-                    if 'response' in chunk:
-                        response_piece = chunk['response']
-                        full_response += response_piece
-                        sys.stdout.write(response_piece)
+        try:
+            # Based on error messages, ApiClient likely has a method called 'run' or 'chat' instead
+            if stream:
+                # Try to use the streaming version if available
+                if hasattr(client, 'run_stream'):
+                    response = client.run_stream(model_name, prompt)
+                    for chunk in response:
+                        piece = chunk.get('response', chunk.get('content', ''))
+                        sys.stdout.write(piece)
                         sys.stdout.flush()
-                    elif 'content' in chunk:  # Alternative API format
-                        response_piece = chunk['content']
-                        full_response += response_piece
-                        sys.stdout.write(response_piece)
+                    sys.stdout.write('\n')
+                    return None
+                elif hasattr(client, 'chat_stream'):
+                    response = client.chat_stream(model_name, prompt)
+                    for chunk in response:
+                        piece = chunk.get('response', chunk.get('content', ''))
+                        sys.stdout.write(piece)
                         sys.stdout.flush()
+                    sys.stdout.write('\n')
+                    return None
+                else:
+                    # No streaming method available, fallback to non-streaming
+                    print("\nWarning: Streaming not supported. Falling back to standard mode.")
+                    stream = False
+            
+            # Non-streaming methods
+            if not stream:
+                # Try common method names for the Ollama API
+                if hasattr(client, 'run'):
+                    response = client.run(model_name, prompt)
+                elif hasattr(client, 'chat'):
+                    response = client.chat(model_name, prompt)
+                elif hasattr(client, 'generate_text'):
+                    response = client.generate_text(model_name, prompt)
+                else:
+                    # Last resort: Try calling the client directly if it's callable
+                    response = client(model_name, prompt)
                 
-                sys.stdout.write('\n')
-                return None
-                
-            except (AttributeError, TypeError) as e:
-                # Fallback to non-streaming if streaming fails
-                print(f"\nWarning: Streaming not supported ({str(e)}). Falling back to standard mode.")
-                stream = False
-                
-        if not stream:
-            # Return the full response at once
-            try:
-                response = client.completion(
-                    model=model_name,
-                    prompt=prompt,
-                )
-                
+                # Handle different response formats
                 if isinstance(response, dict):
-                    return response.get('response', '')
+                    return response.get('response', response.get('content', str(response)))
+                elif isinstance(response, str):
+                    return response
                 else:
                     return str(response)
                     
-            except AttributeError:
-                # Try alternative API pattern
-                try:
-                    response = client.generate(
-                        model_name=model_name,
-                        prompt=prompt,
-                    )
-                    if isinstance(response, dict):
-                        return response.get('response', '')
-                    else:
-                        return str(response)
-                except Exception as e:
-                    return f"Error: {str(e)}"
+        except Exception as e:
+            return f"Error running model: {str(e)}"
     
     def list_models(self, remote=None):
         """
