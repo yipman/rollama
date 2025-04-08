@@ -3,6 +3,7 @@ import requests
 import subprocess
 import re
 import time
+import shlex
 
 class ApiClient:
     def __init__(self, remote=None):
@@ -103,49 +104,68 @@ class ApiClient:
     def _run_local_stream(self, model, prompt):
         """Stream responses from local Ollama model"""
         try:
-            # Use subprocess with line buffering for streaming output
+            # Use a more reliable approach with the JSON format and different flags
+            cmd = ["ollama", "run", model, "--format", "json"]
+            
+            # Start the process with pipes
             process = subprocess.Popen(
-                ["ollama", "run", "--format", "json", model, prompt],
+                cmd,
+                stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
                 bufsize=1  # Line buffered
             )
             
+            # Send the prompt and close stdin
+            process.stdin.write(prompt + "\n")
+            process.stdin.flush()
+            process.stdin.close()
+            
+            # Accumulated response for handling potentially problematic streaming
+            last_chunk = ""
+            
             # Read output line by line as it becomes available
             for line in process.stdout:
+                if not line.strip():
+                    continue
+                    
+                # Try to parse as JSON first (newer Ollama versions)
                 try:
-                    if line.strip():
-                        # Try to parse as JSON first (newer Ollama versions)
-                        try:
-                            data = json.loads(line)
-                            if 'response' in data:
-                                # Extract just the response text, no control chars
-                                content = data['response']
-                                if content:  # Only yield non-empty responses
-                                    yield {"response": content}
-                        except json.JSONDecodeError:
-                            # Clean the text: Remove control chars and tags like [DONE]
-                            clean_text = re.sub(r'\[DONE\]|\[END\]', '', line)
-                            clean_text = re.sub(r'\r|^\s+', '', clean_text)
-                            
-                            if clean_text.strip():  # Don't yield empty lines
-                                yield {"response": clean_text.strip()}
-                except Exception as e:
-                    # If any processing error occurs, yield the raw line as a fallback
-                    if line.strip():
-                        yield {"response": line.strip()}
+                    data = json.loads(line)
+                    if 'response' in data:
+                        content = data['response']
+                        if content:  # Only yield non-empty responses
+                            yield {"response": content}
+                    elif 'done' in data and data['done']:
+                        # End of generation, don't output anything for this marker
+                        continue
+                except json.JSONDecodeError:
+                    # If not JSON, clean the text thoroughly
+                    
+                    # Replace any common control sequences
+                    clean_text = re.sub(r'\x1b\[[0-9;]*[mKHJ]', '', line)  # ANSI escape sequences
+                    clean_text = re.sub(r'\[DONE\]|\[END\]|\r', '', clean_text)  # Status markers and carriage returns
+                    clean_text = re.sub(r'^\s+', '', clean_text)  # Leading whitespace
+                    
+                    # Only output if we have actual content
+                    if clean_text.strip():
+                        # If the text might be a continuation (no space at start and last chunk didn't end with space)
+                        if not clean_text[0].isspace() and last_chunk and not last_chunk[-1].isspace():
+                            # Ensure we're not accidentally joining words
+                            yield {"response": " " + clean_text.strip()}
+                        else:
+                            yield {"response": clean_text.strip()}
+                        
+                    # Remember this chunk for context
+                    last_chunk = clean_text
             
             # Check if there was an error
             process.wait()
             if process.returncode != 0:
-                stderr_output = []
-                for line in process.stderr:
-                    stderr_output.append(line.strip())
-                
+                stderr_output = process.stderr.read()
                 if stderr_output:
-                    error_msg = "\n".join(stderr_output)
-                    yield {"response": f"\nError: {error_msg}"}
+                    yield {"response": f"\nError: {stderr_output.strip()}"}
                 
         except FileNotFoundError:
             yield {"response": "Error: Ollama not found. Make sure it's installed and in your PATH."}
@@ -161,7 +181,7 @@ class ApiClient:
         try:
             headers = {
                 "Content-Type": "application/json",
-                "Accept": "application/json"
+                "Accept": "application/json, text/event-stream"  # Support both JSON and SSE formats
             }
             
             if self.remote.get("api_key"):
@@ -174,6 +194,10 @@ class ApiClient:
                 "stream": True  # Enable server-side streaming
             }
             
+            # Keep track of accumulated content for proper spacing
+            last_chunk = ""
+            accumulated_text = ""
+            
             with requests.post(
                 f"{self.remote['url']}/v1/chat/completions",
                 headers=headers,
@@ -183,37 +207,93 @@ class ApiClient:
             ) as response:
                 
                 if response.status_code != 200:
-                    yield {"response": f"Error: API returned status code {response.status_code}: {response.text}"}
+                    error_text = response.text
+                    try:
+                        # Try to parse JSON error response
+                        error_data = response.json()
+                        if "error" in error_data:
+                            error_text = error_data["error"].get("message", error_text)
+                    except:
+                        pass
+                    yield {"response": f"\nError: API returned status code {response.status_code}: {error_text}"}
                     return
-                    
+                
                 # Process the streamed response
                 for line in response.iter_lines():
-                    if line:
-                        line = line.decode('utf-8')
-                        # Skip SSE prefixes if present
-                        if line.startswith('data: '):
-                            line = line[6:]  # Remove 'data: ' prefix
+                    if not line:
+                        continue
                         
-                        # Skip keep-alive lines
-                        if line.strip() == '':
-                            continue
+                    line = line.decode('utf-8')
+                    
+                    # Handle different SSE formats
+                    if line.startswith('data:'):
+                        line = line[5:].strip()  # Remove 'data:' prefix and whitespace
+                        
+                    # Skip keep-alive messages and empty lines
+                    if line.strip() == '' or line == '[DONE]':
+                        continue
+                        
+                    try:
+                        # Parse JSON data
+                        data = json.loads(line)
+                        
+                        # Handle completion - OpenAI compatible format
+                        if 'choices' in data and len(data['choices']) > 0:
+                            choice = data['choices'][0]
                             
-                        try:
-                            data = json.loads(line)
-                            # Extract the content following OpenAI streaming format
-                            if 'choices' in data and len(data['choices']) > 0:
-                                delta = data['choices'][0].get('delta', {})
+                            # Check if this is a completion message
+                            if choice.get('finish_reason') or choice.get('finish_details'):
+                                continue
+                                
+                            # Extract the content
+                            if 'delta' in choice:  # Streaming format
+                                delta = choice['delta']
                                 content = delta.get('content', '')
-                                if content:
-                                    yield {"response": content}
-                        except json.JSONDecodeError:
-                            # If not JSON, return the raw line
-                            yield {"response": line}
+                            elif 'message' in choice:  # Full message format
+                                content = choice['message'].get('content', '')
+                            else:
+                                # Try direct response format
+                                content = data.get('response', '')
+                                
+                            if content:  # Only yield non-empty responses
+                                # Clean any ANSI escape sequences or control characters
+                                clean_content = re.sub(r'\x1b\[[0-9;]*[mKHJ]', '', content)
+
+                                # Handle spacing between chunks intelligently
+                                if (not clean_content[0].isspace() and last_chunk and 
+                                    not last_chunk[-1].isspace() and not last_chunk[-1] in '.!?,:;'):
+                                    accumulated_text += " " + clean_content
+                                    yield {"response": " " + clean_content}
+                                else:
+                                    accumulated_text += clean_content
+                                    yield {"response": clean_content}
+                                    
+                                last_chunk = clean_content
+                                
+                    except json.JSONDecodeError:
+                        # Not valid JSON, might be plain text or another format
+                        if line.strip():  # Only process non-empty lines
+                            # Clean the line as we did with local content
+                            clean_text = re.sub(r'\x1b\[[0-9;]*[mKHJ]', '', line)  # ANSI escape sequences
+                            clean_text = re.sub(r'\[DONE\]|\[END\]|\r', '', clean_text)  # Status markers
                             
+                            if clean_text.strip():
+                                yield {"response": clean_text.strip()}
+                                last_chunk = clean_text.strip()
+                    except Exception as e:
+                        # Log the error but continue processing
+                        yield {"response": f"\nWarning: Error parsing response chunk: {str(e)}"}
+                        
         except requests.exceptions.RequestException as e:
-            yield {"response": f"Error connecting to remote server: {str(e)}"}
+            # More detailed error information
+            error_msg = f"Error connecting to remote server: {str(e)}"
+            if "Connection refused" in str(e):
+                error_msg += "\nThe server may be down or the URL might be incorrect."
+            elif "Timeout" in str(e):
+                error_msg += "\nThe server took too long to respond."
+            yield {"response": f"\n{error_msg}"}
         except Exception as e:
-            yield {"response": f"Error in streaming: {str(e)}"}
+            yield {"response": f"\nError in streaming: {str(e)}"}
     
     def chat_stream(self, model, prompt):
         """Alias for run_stream to maintain API compatibility"""

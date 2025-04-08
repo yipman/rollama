@@ -1,6 +1,7 @@
 import json
 import requests
 import subprocess
+import re
 import time
 
 class ApiClient:
@@ -104,7 +105,7 @@ class ApiClient:
         try:
             # Use subprocess with line buffering for streaming output
             process = subprocess.Popen(
-                ["ollama", "run", model, prompt],
+                ["ollama", "run", "--format", "json", model, prompt],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
@@ -113,13 +114,38 @@ class ApiClient:
             
             # Read output line by line as it becomes available
             for line in process.stdout:
-                yield {"response": line.strip()}
-                
+                try:
+                    if line.strip():
+                        # Try to parse as JSON first (newer Ollama versions)
+                        try:
+                            data = json.loads(line)
+                            if 'response' in data:
+                                # Extract just the response text, no control chars
+                                content = data['response']
+                                if content:  # Only yield non-empty responses
+                                    yield {"response": content}
+                        except json.JSONDecodeError:
+                            # Clean the text: Remove control chars and tags like [DONE]
+                            clean_text = re.sub(r'\[DONE\]|\[END\]', '', line)
+                            clean_text = re.sub(r'\r|^\s+', '', clean_text)
+                            
+                            if clean_text.strip():  # Don't yield empty lines
+                                yield {"response": clean_text.strip()}
+                except Exception as e:
+                    # If any processing error occurs, yield the raw line as a fallback
+                    if line.strip():
+                        yield {"response": line.strip()}
+            
             # Check if there was an error
             process.wait()
             if process.returncode != 0:
-                error = process.stderr.read()
-                yield {"response": f"\nError: {error}"}
+                stderr_output = []
+                for line in process.stderr:
+                    stderr_output.append(line.strip())
+                
+                if stderr_output:
+                    error_msg = "\n".join(stderr_output)
+                    yield {"response": f"\nError: {error_msg}"}
                 
         except FileNotFoundError:
             yield {"response": "Error: Ollama not found. Make sure it's installed and in your PATH."}
