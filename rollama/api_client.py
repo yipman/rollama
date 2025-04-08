@@ -196,7 +196,8 @@ class ApiClient:
             
             # Keep track of accumulated content for proper spacing
             last_chunk = ""
-            accumulated_text = ""
+            buffer = ""  # Buffer to collect response pieces
+            position = 0  # Track position to detect overwriting
             
             with requests.post(
                 f"{self.remote['url']}/v1/chat/completions",
@@ -256,33 +257,54 @@ class ApiClient:
                                 content = data.get('response', '')
                                 
                             if content:  # Only yield non-empty responses
-                                # Clean any ANSI escape sequences or control characters
-                                clean_content = re.sub(r'\x1b\[[0-9;]*[mKHJ]', '', content)
-
+                                # More aggressive cleaning of control characters
+                                # Remove all ANSI escape sequences, backspaces, carriage returns, etc.
+                                clean_content = re.sub(r'\x1b\[[0-9;]*[a-zA-Z]', '', content)  # ANSI escape sequences
+                                clean_content = re.sub(r'[\r\b]', '', clean_content)  # Carriage returns and backspaces
+                                
+                                # Debug check for special characters that might cause overwriting
+                                has_control_chars = bool(re.search(r'[\x00-\x1F\x7F]', clean_content))
+                                
+                                if has_control_chars:
+                                    # If there are still control chars, convert to hex for inspection
+                                    clean_content = ''.join(c if ord(c) >= 32 else '' for c in clean_content)
+                                
                                 # Handle spacing between chunks intelligently
                                 if (not clean_content[0].isspace() and last_chunk and 
                                     not last_chunk[-1].isspace() and not last_chunk[-1] in '.!?,:;'):
-                                    accumulated_text += " " + clean_content
+                                    # Need a space between chunks
                                     yield {"response": " " + clean_content}
                                 else:
-                                    accumulated_text += clean_content
                                     yield {"response": clean_content}
-                                    
+                                
                                 last_chunk = clean_content
                                 
                     except json.JSONDecodeError:
-                        # Not valid JSON, might be plain text or another format
-                        if line.strip():  # Only process non-empty lines
-                            # Clean the line as we did with local content
-                            clean_text = re.sub(r'\x1b\[[0-9;]*[mKHJ]', '', line)  # ANSI escape sequences
-                            clean_text = re.sub(r'\[DONE\]|\[END\]|\r', '', clean_text)  # Status markers
+                        # Not valid JSON, might be raw text response
+                        # Clean up any control characters
+                        clean_text = line.strip()
+                        clean_text = re.sub(r'\x1b\[[0-9;]*[a-zA-Z]', '', clean_text)  # ANSI escape sequences
+                        clean_text = re.sub(r'[\r\b]', '', clean_text)  # Carriage returns and backspaces
+                        clean_text = re.sub(r'\[DONE\]|\[END\]', '', clean_text)  # Remove status markers
+                        
+                        if clean_text:
+                            # Check if this is a continuation of a word
+                            if (not clean_text[0].isspace() and buffer and
+                                not buffer[-1].isspace() and not buffer[-1] in '.!?,:;'):
+                                # Add a space to separate
+                                yield {"response": " " + clean_text}
+                            else:
+                                yield {"response": clean_text}
                             
-                            if clean_text.strip():
-                                yield {"response": clean_text.strip()}
-                                last_chunk = clean_text.strip()
+                            buffer += clean_text
+                            
                     except Exception as e:
                         # Log the error but continue processing
                         yield {"response": f"\nWarning: Error parsing response chunk: {str(e)}"}
+                
+                # If we have content in the buffer after processing all chunks, ensure we end cleanly
+                if buffer:
+                    yield {"response": "\n"}
                         
         except requests.exceptions.RequestException as e:
             # More detailed error information
