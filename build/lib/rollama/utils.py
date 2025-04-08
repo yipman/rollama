@@ -51,7 +51,12 @@ class SpinnerAnimation:
         self.running = False
         if self.spinner_thread:
             self.spinner_thread.join(0.2)
-        sys.stdout.write("\r" + " " * (len(self.message) + 2) + "\r")
+        
+        # Clear the spinner line completely
+        sys.stdout.write("\r" + " " * (len(self.message) + 10))
+        
+        # CRITICAL FIX: Add a newline to ensure text starts on a fresh line
+        sys.stdout.write("\r\n")
         sys.stdout.flush()
 
 def interactive_mode(model_manager, model_name, remote=None):
