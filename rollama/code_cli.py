@@ -151,10 +151,7 @@ def main():
         """Handle natural language commands using AI"""
         try:
             response = code_manager.execute_ai_command(command)
-            print("\nAI Assistant Response:")
-            print("----------------------")
             print(response)
-            print("----------------------\n")
         except Exception as e:
             print(f"Error: {str(e)}")
 
