@@ -56,28 +56,84 @@ class ModelManager:
             if stream:
                 # Try to use the streaming version if available
                 if hasattr(client, 'run_stream'):
-                    # Get the streaming response generator
-                    response_generator = client.run_stream(model_name, prompt)
+                    # Get the stream generator
+                    response_stream = client.run_stream(model_name, prompt)
                     
-                    # CRITICAL FIX: Add a blank line and delay to ensure spinner is fully gone
-                    # This needs to happen OUTSIDE of the spinner context in utils.py
-                    print()  # Add a blank line after spinner stops
-                    time.sleep(0.1)  # Short delay to ensure terminal is ready
+                    # CRITICAL FIX: Ensure proper transition after animation stops
+                    # Clear the current line and move to a new line
+                    sys.stdout.write("\r" + " " * 50)  # Clear the line with spaces
+                    sys.stdout.write("\r\n")  # Move to a new line
+                    sys.stdout.flush()
                     
-                    # Process streaming response
-                    self._handle_streaming_response(response_generator)
+                    # Short delay to ensure terminal is ready
+                    time.sleep(0.05)
+                    
+                    # Process the streaming response without any animation
+                    full_text = ""
+                    for chunk in response_stream:
+                        piece = chunk.get('response', chunk.get('content', ''))
+                        if not piece:
+                            continue
+                            
+                        # Clean any control characters
+                        clean_piece = re.sub(r'[\r\b\x1b\[\d*[A-Za-z]]', '', piece)
+                        
+                        # Add space between words if needed
+                        if (clean_piece and clean_piece[0].isalnum() and 
+                            full_text and full_text[-1].isalnum() and 
+                            not full_text[-1] in '.!?,:;'):
+                            sys.stdout.write(' ')
+                            sys.stdout.flush()
+                            full_text += ' '
+                        
+                        # Write the piece
+                        sys.stdout.write(clean_piece)
+                        sys.stdout.flush()
+                        full_text += clean_piece
+                    
+                    # Add a final newline
+                    sys.stdout.write('\n')
+                    sys.stdout.flush()
                     return None
                     
                 elif hasattr(client, 'chat_stream'):
-                    # Get the streaming response generator
-                    response_generator = client.chat_stream(model_name, prompt)
+                    # Apply the same pattern for chat_stream
+                    response_stream = client.chat_stream(model_name, prompt)
                     
-                    # Same fix for chat_stream
-                    print()  # Add a blank line after spinner stops
-                    time.sleep(0.1)  # Short delay to ensure terminal is ready
+                    # CRITICAL FIX: Ensure proper transition after animation stops
+                    sys.stdout.write("\r" + " " * 50)  # Clear the line with spaces
+                    sys.stdout.write("\r\n")  # Move to a new line
+                    sys.stdout.flush()
                     
-                    # Process streaming response
-                    self._handle_streaming_response(response_generator)
+                    # Short delay to ensure terminal is ready
+                    time.sleep(0.05)
+                    
+                    # Process the streaming response without any animation
+                    full_text = ""
+                    for chunk in response_stream:
+                        piece = chunk.get('response', chunk.get('content', ''))
+                        if not piece:
+                            continue
+                            
+                        # Clean any control characters
+                        clean_piece = re.sub(r'[\r\b\x1b\[\d*[A-Za-z]]', '', piece)
+                        
+                        # Add space between words if needed
+                        if (clean_piece and clean_piece[0].isalnum() and 
+                            full_text and full_text[-1].isalnum() and 
+                            not full_text[-1] in '.!?,:;'):
+                            sys.stdout.write(' ')
+                            sys.stdout.flush()
+                            full_text += ' '
+                        
+                        # Write the piece
+                        sys.stdout.write(clean_piece)
+                        sys.stdout.flush()
+                        full_text += clean_piece
+                    
+                    # Add a final newline
+                    sys.stdout.write('\n')
+                    sys.stdout.flush()
                     return None
                 else:
                     # No streaming method available, fallback to non-streaming
@@ -107,37 +163,6 @@ class ModelManager:
                     
         except Exception as e:
             return f"Error running model: {str(e)}"
-    
-    def _handle_streaming_response(self, response_generator):
-        """Process streaming response generator and display output properly"""
-        accumulated_text = ""
-        last_chunk = ""
-        
-        for chunk in response_generator:
-            piece = chunk.get('response', chunk.get('content', ''))
-            if not piece:
-                continue
-                
-            # Clean any control characters that might cause overwriting
-            clean_piece = re.sub(r'[\r\b\x1b\[\d*[A-Za-z]]', '', piece)
-            
-            # Handle spacing between words properly
-            if (clean_piece and clean_piece[0].isalnum() and 
-                accumulated_text and accumulated_text[-1].isalnum()):
-                sys.stdout.write(' ')
-                sys.stdout.flush()
-                accumulated_text += ' '
-            
-            # Output the cleaned piece
-            sys.stdout.write(clean_piece)
-            sys.stdout.flush()
-            
-            accumulated_text += clean_piece
-            last_chunk = clean_piece
-        
-        # Add a final newline
-        sys.stdout.write('\n')
-        sys.stdout.flush()
     
     def list_models(self, remote=None):
         """

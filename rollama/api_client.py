@@ -179,31 +179,33 @@ class ApiClient:
             return
             
         try:
+            # Send a newline first to ensure clean transition after spinner
+            yield {"response": "\n"}
+            
             headers = {
                 "Content-Type": "application/json",
-                "Accept": "application/json, text/event-stream"  # Support both JSON and SSE formats
+                "Accept": "application/json, text/event-stream"  
             }
             
             if self.remote.get("api_key"):
                 headers["Authorization"] = f"Bearer {self.remote['api_key']}"
             
-            # Using OpenAI API compatible format with streaming enabled
             payload = {
                 "model": model,
                 "messages": [{"role": "user", "content": prompt}],
-                "stream": True  # Enable server-side streaming
+                "stream": True
             }
             
-            # Keep track of accumulated content for proper spacing
+            # Initialize response tracking
             last_chunk = ""
-            buffer = ""  # Buffer to collect response pieces
-            position = 0  # Track position to detect overwriting
+            buffer = ""
             
+            # Remove position tracking since we're handling newlines differently
             with requests.post(
                 f"{self.remote['url']}/v1/chat/completions",
                 headers=headers,
                 json=payload,
-                stream=True,  # Enable HTTP streaming
+                stream=True,
                 timeout=12000
             ) as response:
                 
