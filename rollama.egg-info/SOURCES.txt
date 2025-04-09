@@ -3,6 +3,8 @@ setup.py
 rollama/__init__.py
 rollama/api_client.py
 rollama/cli.py
+rollama/code_cli.py
+rollama/code_manager.py
 rollama/config.py
 rollama/gui.py
 rollama/gui_main.py

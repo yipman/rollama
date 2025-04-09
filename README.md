@@ -26,6 +26,8 @@
 - **API Compatibility**: Works with OpenAI API compatible interfaces
 - **Interactive Experience**: Enjoy a responsive chat mode with history
 - **Modern GUI**: Use the graphical interface with terminal emulation
+- **Code Management**: Smart code generation and workspace management
+- **Real-time Code Creation**: Watch your code being written in real-time
 - **File Support**: Attach and process files and images in conversations
 - **Customization**: Personalize settings to your workflow
 - **Cross-Platform**: Works on macOS, Linux, and Windows
@@ -66,6 +68,46 @@ rollama run llama2 --interactive
 # Run with specific parameters
 rollama run llama2 --temperature 0.7 --top-p 0.9 "Generate creative ideas"
 ```
+
+### Code Management
+
+Rollama includes a powerful code management system that helps you create and manage code projects:
+
+```bash
+# Start the code management interface
+rollama-code
+
+# Create a new workspace
+rollama-code workspace create my-project
+
+# List workspaces
+rollama-code workspace list
+
+# Switch to a workspace
+rollama-code workspace switch my-project
+```
+
+#### Code Generation Features
+
+The code management system includes:
+
+- **Real-time Code Generation**: Watch as code is generated word by word
+- **Smart File Operations**: Automatically creates, edits, and manages files
+- **Project Understanding**: AI assistant understands your project context
+- **Multi-file Support**: Handle complex projects across multiple files
+- **Code Analysis**: Get intelligent suggestions and improvements
+- **Language Support**: Works with multiple programming languages
+- **Interactive Development**: Ask questions and get instant code solutions
+
+Example commands in the code interface:
+
+Command | Description
+------- | -----------
+`create <project>` | Create a new coding project
+`edit <file>` | Edit an existing file
+`analyze` | Get code analysis and suggestions
+`help` | Show available commands
+`exit` | Exit the code interface
 
 ### GUI Version
 
@@ -160,9 +202,10 @@ Rollama is built with a modular architecture:
 1. **Configuration Manager**: Securely stores remote server information
 2. **API Client**: Manages connections to local and remote Ollama instances
 3. **Model Manager**: Handles operations on models for consistent performance
-4. **Command Interface**: Provides intuitive CLI interaction
-5. **Interactive Mode**: Enables responsive chat sessions
-6. **GUI Layer**: Delivers a modern user interface with Tkinter
+4. **Code Manager**: Provides intelligent code generation and management
+5. **Command Interface**: Provides intuitive CLI interaction
+6. **Interactive Mode**: Enables responsive chat sessions
+7. **GUI Layer**: Delivers a modern user interface with Tkinter
 
 ## 👥 Contributing
 

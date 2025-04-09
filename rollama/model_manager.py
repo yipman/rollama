@@ -35,6 +35,54 @@ class ModelManager:
         
         return ApiClient(remote_config)
     
+    def run_code_model(self, prompt, remote=None):
+        """
+        Run a model specifically for code generation with word-by-word streaming support.
+        
+        Args:
+            prompt (str): Prompt to send to the model
+            remote (str, optional): Remote server to use
+            
+        Returns:
+            Generator yielding response words for processing
+        """
+        client = self._get_client(remote)
+        current_word = []
+        
+        try:
+            stream_method = getattr(client, 'run_stream', None) or getattr(client, 'chat_stream')
+            if stream_method:
+                response_stream = stream_method(self.config.get_default_model(), prompt)
+                
+                for chunk in response_stream:
+                    piece = chunk.get('response', chunk.get('content', ''))
+                    if not piece:
+                        continue
+                        
+                    # Split the piece into words while preserving newlines
+                    for char in piece:
+                        if char.isspace():
+                            if current_word:
+                                yield ''.join(current_word)
+                                current_word = []
+                            if char == '\n':
+                                yield '\n'
+                        else:
+                            current_word.append(char)
+                
+                # Yield any remaining word
+                if current_word:
+                    yield ''.join(current_word)
+            else:
+                # Fallback to non-streaming mode
+                response = self.run_model(self.config.get_default_model(), prompt, remote=remote, stream=False)
+                # Split response into words and yield them
+                for word in response.split():
+                    yield word
+                    
+        except Exception as e:
+            yield f"\nError in code generation: {str(e)}"
+
     def run_model(self, model_name, prompt, remote=None, stream=True):
         """
         Run a model with the given prompt.

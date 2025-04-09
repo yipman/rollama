@@ -1,3 +1,4 @@
 [console_scripts]
 rollama = rollama.cli:main
+rollama-code = rollama.code_cli:main
 rollama-gui = rollama.gui:main

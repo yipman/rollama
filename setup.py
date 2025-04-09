@@ -14,6 +14,7 @@ setup(
         "console_scripts": [
             "rollama=rollama.cli:main",
             "rollama-gui=rollama.gui:main",  # Added GUI entry point
+            "rollama-code=rollama.code_cli:main",  # Added Code management entry point
         ],
     },
 )
