@@ -46,7 +46,7 @@ class ModelManager:
             stream (bool, optional): Whether to stream the response. Defaults to True.
             
         Returns:
-            If stream=True: None (prints directly to console)
+            If stream=True: str containing full response that was streamed
             If stream=False: str containing full response
         """
         client = self._get_client(remote)
@@ -60,36 +60,46 @@ class ModelManager:
                     
                     response_stream = stream_method(model_name, prompt)
                     last_chunk = ""
+                    full_response = []  # Collect chunks to build full response
                     
+                    # Don't show the tag to the user, but still track responses
                     for chunk in response_stream:
                         piece = chunk.get('response', chunk.get('content', ''))
                         if piece:
                             # Add space between words if needed
                             if piece[0].isalnum() and last_chunk and last_chunk[-1].isalnum():
                                 sys.stdout.write(' ')
+                                full_response.append(' ')
                             sys.stdout.write(piece)
+                            full_response.append(piece)
                             sys.stdout.flush()
                             last_chunk = piece
                             
                     sys.stdout.write('\n')
                     sys.stdout.flush()
-                    return None
+                    
+                    # Return the collected response
+                    return ''.join(full_response)
                 else:
                     print("\nWarning: Streaming not supported. Falling back to standard mode.")
                     stream = False
             
             # Non-streaming mode
             if not stream:
-                # Try common method names for the Ollama API
-                if hasattr(client, 'run'):
+                # Use appropriate methods on the client
+                if hasattr(client, 'run_local_model') and not client.remote:
+                    response = client.run_local_model(model_name, prompt)
+                elif hasattr(client, 'run_remote_model') and client.remote:
+                    response = client.run_remote_model(model_name, prompt)
+                # Try common method names for the Ollama API as fallback
+                elif hasattr(client, 'run'):
                     response = client.run(model_name, prompt)
                 elif hasattr(client, 'chat'):
                     response = client.chat(model_name, prompt)
                 elif hasattr(client, 'generate_text'):
                     response = client.generate_text(model_name, prompt)
                 else:
-                    # Last resort: Try calling the client directly if it's callable
-                    response = client(model_name, prompt)
+                    raise AttributeError(f"No appropriate method found on API client to handle the request")
                 
                 # Handle different response formats
                 if isinstance(response, dict):

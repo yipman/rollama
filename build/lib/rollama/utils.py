@@ -19,14 +19,52 @@ def interactive_mode(model_manager, model_name, remote=None):
     setup_history()
     
     print(f"Starting interactive session with {model_name}. Type 'exit' or 'quit' to end the session.")
+    print("Type 'clear history' to reset conversation memory.")
+    
+    # Initialize conversation history - list of (speaker, message) tuples
+    chat_history = []
     
     while True:
         try:
+            # Use standard prompt without tags for user display
             user_input = input("\n> ")
+            
+            # Handle special commands
             if user_input.lower() in ['exit', 'quit']:
                 break
-                
-            model_manager.run_model(model_name, user_input, remote=remote, stream=True)
+            elif user_input.lower() == 'clear history':
+                chat_history = []
+                print("Conversation history cleared.")
+                continue
+            
+            # Add user input to history with tag
+            chat_history.append(("user", user_input))
+            
+            # Create context with conversation history
+            if len(chat_history) > 1:
+                # Format conversation history for context
+                context = "Chat history:\n"
+                for speaker, message in chat_history:
+                    # Use clear role tags for the model, but not visible to user
+                    role_tag = "[USER]" if speaker == "user" else "[ASSISTANT]"
+                    context += f"{role_tag}: {message}\n"
+                # Add a prompt for the assistant to continue
+                context += "[ASSISTANT]: "
+                prompt = context
+            else:
+                # First interaction
+                prompt = f"[USER]: {user_input}\n[ASSISTANT]: "
+            
+            # Run model with streaming and capture response in a single call
+            response = model_manager.run_model(model_name, prompt, remote=remote, stream=True)
+            
+            # Store response in history if available
+            if response:
+                chat_history.append(("assistant", response))
+            else:
+                # Fallback if response is None (e.g., due to error)
+                print("\nWarning: Could not capture response for history")
+                chat_history.append(("assistant", "(Response not captured)"))
                 
         except KeyboardInterrupt:
             print("\nExiting interactive mode.")
