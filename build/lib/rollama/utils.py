@@ -2,9 +2,6 @@ import os
 import readline
 import atexit
 import sys
-import time
-import threading
-import itertools
 
 def setup_history():
     """Set up command history for interactive mode"""
@@ -16,47 +13,6 @@ def setup_history():
         pass
     
     atexit.register(readline.write_history_file, histfile)
-
-class SpinnerAnimation:
-    """Displays a spinning animation in the terminal while a process is running."""
-    
-    def __init__(self, message="Loading..."):
-        self.message = message
-        self.spinner_chars = itertools.cycle(['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'])
-        self.running = False
-        self.spinner_thread = None
-    
-    def _animate(self):
-        while self.running:
-            sys.stdout.write(f"\r{next(self.spinner_chars)} {self.message}")
-            sys.stdout.flush()
-            time.sleep(0.1)
-            
-    def __enter__(self):
-        self.start()
-        return self
-        
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        self.stop()
-    
-    def start(self):
-        self.running = True
-        sys.stdout.write(f"\r{next(self.spinner_chars)} {self.message}")
-        sys.stdout.flush()
-        self.spinner_thread = threading.Thread(target=self._animate)
-        self.spinner_thread.daemon = True
-        self.spinner_thread.start()
-    
-    def stop(self):
-        """Stop the spinner animation and clear the line completely."""
-        self.running = False
-        if self.spinner_thread:
-            self.spinner_thread.join(0.2)
-        
-        # Just clear the current line but don't add a newline
-        # The ModelManager will handle the transition to a new line
-        sys.stdout.write("\r" + " " * (len(self.message) + 10) + "\r")
-        sys.stdout.flush()
 
 def interactive_mode(model_manager, model_name, remote=None):
     """Run the model in interactive mode with streaming support."""
@@ -70,10 +26,7 @@ def interactive_mode(model_manager, model_name, remote=None):
             if user_input.lower() in ['exit', 'quit']:
                 break
                 
-            # Use spinner without text
-            with SpinnerAnimation():
-                # The model_manager will now handle transitioning from spinner to response
-                model_manager.run_model(model_name, user_input, remote=remote, stream=True)
+            model_manager.run_model(model_name, user_input, remote=remote, stream=True)
                 
         except KeyboardInterrupt:
             print("\nExiting interactive mode.")
