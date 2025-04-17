@@ -2,6 +2,7 @@ import os
 import shutil
 import json
 import sys
+import subprocess
 
 try:
     from pathlib import Path
@@ -233,17 +234,167 @@ class CodeManager:
         old_path.rename(new_path)
         return "Renamed: {} -> {}".format(old_path.name, new_path.name)
 
-    def execute_ai_command(self, command):
-        """Execute a natural language command using AI"""
-        # Create system prompt that encourages direct responses
-        system_prompt = "You are a helpful assistant. Provide direct responses to questions without analyzing message history or making observations about the conversation. Focus solely on answering the current question."
+    def execute_ai_command(self, prompt):
+        """Execute an AI command using the current model"""
+        if not self.current_workspace:
+            raise ValueError("No workspace selected")
+            
+        # Add workspace context to the prompt
+        files = self.list_files()
+        workspace_context = f"""
+Current workspace: {self.current_workspace.name}
+Files in workspace:
+{chr(10).join(files)}
+
+User request: {prompt}
+
+You are a coding assistant. The user wants you to help with their code. You can:
+1. Generate new code files using 'CREATE FILE: filename' followed by the content
+2. Edit existing files using 'EDIT FILE: filename' followed by the new content
+3. Create folders using 'CREATE DIR: dirname'
+4. Delete files using 'DELETE FILE: filename'
+
+Current workspace files are shown above. When generating or editing code:
+- Include proper imports
+- Follow language best practices
+- Add descriptive comments
+- Handle errors appropriately
+- Include tests when relevant
+
+Respond with clear explanations and include any code changes using the markers above.
+For example:
+CREATE FILE: example.py
+def hello():
+    return "Hello world"
+
+EDIT FILE: test.py
+import unittest
+from example import hello
+
+class TestExample(unittest.TestCase):
+    def test_hello(self):
+        self.assertEqual(hello(), "Hello world")
+"""
         
-        try:
-            # Get response from AI model
-            response = self.model_manager.get_completion(
-                system_prompt,
-                command
-            )
-            return response
-        except Exception as e:
-            raise Exception(f"Failed to execute AI command: {str(e)}")
+        model = self.config.get_default_model()
+        response = self.model_manager.run_model(model, workspace_context)
+        
+        # Process any file operations in the response
+        self._process_ai_response(response)
+        
+        # Execute any commands mentioned in the response that require setup
+        self._execute_setup_commands(response)
+        
+        return response
+
+    def _process_ai_response(self, response):
+        """Process file operations mentioned in the AI response"""
+        # Look for special markers and markdown code blocks
+        lines = response.split('\n')
+        current_file = None
+        content_buffer = []
+        in_code_block = False
+        current_markdown_file = None
+
+        for line in lines:
+            # Handle explicit markers
+            if line.startswith('CREATE FILE:') or line.startswith('EDIT FILE:'):
+                # Flush any previous file operation
+                if current_file and content_buffer:
+                    try:
+                        # If it's an edit operation, ensure the file exists
+                        if current_file.startswith('EDIT FILE:'):
+                            file_path = current_file.split(':', 1)[1].strip()
+                            if not Path(self.current_workspace / file_path).exists():
+                                raise ValueError(f"File not found: {file_path}")
+                            self.edit_file(file_path, '\n'.join(content_buffer))
+                        else:
+                            file_path = current_file.split(':', 1)[1].strip()
+                            self.create_file(file_path, '\n'.join(content_buffer))
+                    except Exception as e:
+                        print(f"Error processing file operation: {str(e)}")
+                    content_buffer = []
+                current_file = line
+            elif line.startswith('DELETE FILE:'):
+                path = line.split(':', 1)[1].strip()
+                self.delete_file(path)
+                current_file = None
+            elif line.startswith('CREATE DIR:'):
+                path = line.split(':', 1)[1].strip()
+                self.create_directory(path)
+                current_file = None
+            # Handle markdown code blocks
+            elif line.startswith('```'):
+                if not in_code_block:
+                    # Starting a code block
+                    in_code_block = True
+                    # Look for language and filename in format ```python/filepath: filename.py
+                    if '/' in line and 'filepath:' in line:
+                        parts = line[3:].strip().split('/')
+                        if len(parts) >= 2:
+                            current_markdown_file = parts[1].replace('filepath:', '').strip()
+                    content_buffer = []
+                else:
+                    # Ending a code block
+                    in_code_block = False
+                    if current_markdown_file and content_buffer:
+                        try:
+                            # Remove the first line if it contains filepath marker
+                            if content_buffer and 'filepath:' in content_buffer[0]:
+                                content_buffer = content_buffer[1:]
+                            # Create or edit the file
+                            if Path(self.current_workspace / current_markdown_file).exists():
+                                self.edit_file(current_markdown_file, '\n'.join(content_buffer))
+                            else:
+                                self.create_file(current_markdown_file, '\n'.join(content_buffer))
+                        except Exception as e:
+                            print(f"Error processing markdown code block: {str(e)}")
+                        current_markdown_file = None
+                        content_buffer = []
+            # Collect content inside code blocks or after file markers
+            elif (current_file and not line.startswith('```')) or (in_code_block and current_markdown_file):
+                content_buffer.append(line)
+
+        # Flush any remaining file operation
+        if current_file and content_buffer:
+            try:
+                if current_file.startswith('EDIT FILE:'):
+                    file_path = current_file.split(':', 1)[1].strip()
+                    self.edit_file(file_path, '\n'.join(content_buffer))
+                else:
+                    file_path = current_file.split(':', 1)[1].strip()
+                    self.create_file(file_path, '\n'.join(content_buffer))
+            except Exception as e:
+                print(f"Error processing final file operation: {str(e)}")
+
+    def _execute_setup_commands(self, response):
+        """Execute any setup commands mentioned in the response"""
+        # Extract commands between ```bash blocks
+        in_bash_block = False 
+        command_buffer = []
+        
+        for line in response.split('\n'):
+            if line.startswith('```bash'):
+                in_bash_block = True
+                command_buffer = []
+            elif line.startswith('```') and in_bash_block:
+                in_bash_block = False
+                # Execute collected commands
+                if command_buffer:
+                    try:
+                        # Remove any cd commands as we're already in the workspace
+                        commands = [cmd for cmd in command_buffer if not cmd.strip().startswith('cd ')]
+                        if commands:
+                            for cmd in commands:
+                                subprocess.run(
+                                    cmd,
+                                    shell=True,
+                                    cwd=str(self.current_workspace),
+                                    check=True,
+                                    capture_output=True,
+                                    text=True
+                                )
+                    except subprocess.CalledProcessError as e:
+                        print(f"Error executing setup command: {e.stderr}")
+            elif in_bash_block and line.strip():
+                command_buffer.append(line.strip())
